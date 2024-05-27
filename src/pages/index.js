@@ -1,35 +1,43 @@
 import React, { useEffect, useState } from 'react';
 import Webcam from 'react-webcam';
 
-
 const CreateLiveBroadcast = () => {
     const [accessToken, setAccessToken] = useState('');
     const [stream, setStream] = useState(null);
     const [liveBroadcastId, setLiveBroadcastId] = useState(null);
-
+    const [ingestionInfo, setIngestionInfo] = useState(null);
+    const [videoStreamURL, setVideoStreamURL] = useState(null);
     const startStream = async () => {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
             setStream(stream);
-            createLiveBroadcast(stream);
+            createLiveBroadcast(stream); // Create live broadcast function call
         } catch (error) {
-            console.error('Error accessing media devices:', error);
+            console.error('Media devices access error:', error);
+            alert('Camera aur microphone access nahi ho rahe. Properly connected aur accessible hone chahiye.');
         }
-    }
+    };
 
     const createLiveBroadcast = async (stream) => {
+        const now = new Date();
+    
+
         try {
             const requestBody = {
                 snippet: {
-                    title: 'My Live Broadcast',
-                    description: 'Description of my live broadcast',
-                },
-                status: {
-                    privacyStatus: 'public'
-                }
+                    title: `New Video: ${new Date().toISOString()}`,
+                    scheduledStartTime: `${new Date().toISOString()}`,
+                    description:
+                      'A description of your video stream. This field is optional.',
+                  },
+               
+                  status: {
+                    privacyStatus: 'public',
+                    selfDeclaredMadeForKids: true,
+                  },
             };
 
-            const url = `https://www.googleapis.com/youtube/v3/liveBroadcasts?access_token=${accessToken}&part=id%2Csnippet%2Cstatus`;
+            const url = `https://www.googleapis.com/youtube/v3/liveBroadcasts?access_token=${accessToken}&part=id,snippet,status`;
 
             const response = await fetch(url, {
                 method: 'POST',
@@ -42,115 +50,106 @@ const CreateLiveBroadcast = () => {
             if (response.ok) {
                 const data = await response.json();
                 setLiveBroadcastId(data.id);
-                startLiveStream(stream, data.id);
+                createLiveStream(data.id); // Create live stream function call
                 console.log('Live broadcast created:', data);
-                alert('Live broadcast created successfully!');
+                alert('Live broadcast successfully created!');
             } else {
                 console.error('Failed to create live broadcast:', response.status);
-                alert('Failed to create live broadcast. Please try again.');
+                alert('Live broadcast create nahi hui. Dobara try karein.');
             }
         } catch (error) {
             console.error('Error creating live broadcast:', error);
-            alert('An error occurred while creating the live broadcast.');
+            alert('Live broadcast create karne mein error hua.');
         }
     };
 
-    const startLiveStream = async (stream, broadcastId) => {
+    const createLiveStream = async (broadcastId) => {
         try {
-            const constraints = {
-                audio: true,
-                video: {
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 },
-                    facingMode: 'user' // Or 'environment' for rear camera
-                }
-            };
-
-            const webcamStream = new MediaStream();
-            const videoTrack = stream.getVideoTracks()[0];
-            const audioTrack = stream.getAudioTracks()[0];
-            webcamStream.addTrack(videoTrack);
-            webcamStream.addTrack(audioTrack);
-
-            const webcamVideoElement = document.createElement('video');
-            webcamVideoElement.srcObject = webcamStream;
-            webcamVideoElement.play();
-
-            const rtcPeerConnection = new RTCPeerConnection();
-            rtcPeerConnection.addStream(webcamStream);
-
-            const offer = await rtcPeerConnection.createOffer();
-            await rtcPeerConnection.setLocalDescription(offer);
-
-            const requestBody = {
-                snippet: {
-                    liveBroadcastContent: 'live',
-                    title: 'My Live Broadcast',
-                    description: 'Description of my live broadcast',
-                },
-                status: {
-                    privacyStatus: 'public'
-                }
-            };
-
-            const liveBroadcastUrl = `https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet,status&access_token=${accessToken}`;
-            const liveStreamUrl = `https://www.googleapis.com/youtube/v3/liveStreams?part=snippet,status&access_token=${accessToken}`;
-
-            const liveBroadcastResponse = await fetch(liveBroadcastUrl, {
-                method: 'POST',
-                body: JSON.stringify(requestBody),
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            });
-
-            const liveBroadcastData = await liveBroadcastResponse.json();
-            const liveBroadcastId = liveBroadcastData.id;
-
             const liveStreamRequestBody = {
                 snippet: {
-                    title: 'My Live Stream',
-                    description: 'Description of my live stream'
-                },
-                cdn: {
+                    title: "Your new video stream's name",
+                    description:
+                      'A description of your video stream. This field is optional.',
+                  },
+                  cdn: {
                     frameRate: 'variable',
                     ingestionType: 'rtmp',
-                    resolution: 'variable'
-                },
-                status: {
-                    streamStatus: 'active'
-                }
+                    resolution: 'variable',
+                    format: '',
+                  },
+                  status:{
+                    streamStatus:'active',
+                  }
+                 
             };
+
+            const liveStreamUrl = `https://www.googleapis.com/youtube/v3/liveStreams?access_token=${accessToken}&part=id,snippet,cdn,status`;
 
             const liveStreamResponse = await fetch(liveStreamUrl, {
                 method: 'POST',
-                body: JSON.stringify(liveStreamRequestBody),
                 headers: {
                     'Content-Type': 'application/json'
-                }
+                },
+                body: JSON.stringify(liveStreamRequestBody)
             });
 
-            const liveStreamData = await liveStreamResponse.json();
-            const liveStreamId = liveStreamData.id;
+            if (liveStreamResponse.ok) {
+                const liveStreamData = await liveStreamResponse.json();
+                setIngestionInfo(liveStreamData.cdn.ingestionInfo);
+                bindBroadcastToStream(broadcastId, liveStreamData.id);
+                console.log('Live stream created:', liveStreamData);
+            } else {
+                console.error('Failed to create live stream:', liveStreamResponse.status);
+            }
+        } catch (error) {
+            console.error('Error creating live stream:', error);
+        }
+    };
 
-            const liveBroadcastStreamUrl = `https://www.googleapis.com/youtube/v3/liveBroadcasts/bind?id=${liveBroadcastId}&part=id,snippet,contentDetails,status&streamId=${liveStreamId}&access_token=${accessToken}`;
+    const bindBroadcastToStream = async (broadcastId, streamId) => {
+        try {
+            const url = `https://www.googleapis.com/youtube/v3/liveBroadcasts/bind?id=${broadcastId}&part=id,snippet,contentDetails,status&streamId=${streamId}&access_token=${accessToken}`;
 
-            const liveBroadcastStreamResponse = await fetch(liveBroadcastStreamUrl, {
+            const response = await fetch(url, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 }
             });
 
-            if (liveBroadcastStreamResponse.ok) {
-                console.log('Live stream started successfully!');
+            if (response.ok) {
+                console.log('Broadcast successfully bound to stream');
+                // Delay the transition to live to ensure the stream is active
+                setTimeout(() => transitionToLive(broadcastId), 60000); // 60 seconds delay
             } else {
-                console.error('Failed to start live stream:', liveBroadcastStreamResponse.status);
+                console.error('Failed to bind broadcast to stream:', response.status);
             }
         } catch (error) {
-            console.error('Error starting live stream:', error);
+            console.error('Error binding broadcast to stream:', error);
         }
     };
+
+    const transitionToLive = async (broadcastId) => {
+        try {
+            const url = `https://www.googleapis.com/youtube/v3/liveBroadcasts/transition?broadcastStatus=live&id=${broadcastId}&part=id,status&access_token=${accessToken}`;
+
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (response.ok) {
+                console.log('Broadcast successfully transitioned to live');
+            } else {
+                console.error('Failed to transition broadcast to live:', response.status);
+            }
+        } catch (error) {
+            console.error('Error transitioning broadcast to live:', error);
+        }
+    };
+
     const oauthSignIn = () => {
         const oauth2Endpoint = 'https://accounts.google.com/o/oauth2/v2/auth';
         const params = {
@@ -171,16 +170,13 @@ const CreateLiveBroadcast = () => {
             setAccessToken(params.get('access_token'));
         };
         getAccessTokenFromURL();
-    }, []);
-
+    }, []);    
     return (
         <div>
             <h2>Create Live Broadcast</h2>
             <Webcam audio={true} video={true} />
             <button onClick={startStream}>Start Live Broadcast</button>
-
             <button onClick={oauthSignIn}>Sign In with Google</button>
-
         </div>
     );
 };
